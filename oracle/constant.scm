@@ -233,6 +233,11 @@
   (define-constant +sqlt-cfilee+   115) ; character file lob
   (define-constant +sqlt-rset+     116) ; result set type
   (define-constant +sqlt-nco+      122) ; named collection type (varray or nested table)
+
+  (define-constant +oci-attr-trans-timeout+ 142) ; transaction timeout
+  (define-constant +oci-attr-server-status+ 143) ; state of the server handle
+  (define-constant +oci-attr-statement+     144) ; statement txt in stmt hdl
+
   (define-constant +sqlt-vst+      155) ; OCIString type
   (define-constant +sqlt-odt+      156) ; OCIDate type
 
@@ -287,4 +292,7 @@
   (define-constant +oci-next-piece+  2)	; the next of many pieces
   (define-constant +oci-last-piece+  3)	; the last piece
 
+  ;; server handle attribute values
+  (define-constant +oci-server-not-connected+        0)
+  (define-constant +oci-server-normal+               1)
 )

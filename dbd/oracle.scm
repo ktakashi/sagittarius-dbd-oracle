@@ -40,9 +40,7 @@
   (define-class <dbi-oracle-driver> (<dbi-driver>)
     ((env :init-keyword :env :reader oracle-env)))
   (define-class <dbi-oracle-connection> (<dbi-connection>)
-    ((connection :init-keyword :connection :reader oracle-connection)
-     ;; bad idea but I couldn't find something from OCI...
-     (open?      :init-value #t)))
+    ((connection :init-keyword :connection :reader oracle-connection)))
   (define-class <dbi-oracle-query> (<dbi-query>)
     ((statement :init-keyword :statement :reader oracle-statement)
      (cursor    :init-value #f)))
@@ -67,11 +65,10 @@
 				      :auto-commit auto-commit))))
 
   (define-method dbi-open? ((conn <dbi-oracle-connection>))
-    (~ conn 'open?))
+    (connection-open? (oracle-connection conn)))
 
   (define-method dbi-close ((conn <dbi-oracle-connection>))
-    (disconnect-database (oracle-connection conn))
-    (set! (~ conn 'open?) #f))
+    (disconnect-database (oracle-connection conn)))
 
   (define (convert-sql sql)
     ;; convert ? to numbers
@@ -94,6 +91,12 @@
 	    (bind-parameter stmt i (car args))
 	    (loop (+ i 1) (cdr args)))))
       (make <dbi-oracle-query> :statement stmt)))
+
+  (define-method dbi-open? ((q <dbi-oracle-query>))
+    (statement-open? (~ q 'statement)))
+
+  (define-method dbi-close ((q <dbi-oracle-query>))
+    (release-statement (~ q 'statement)))
 
   (define-method dbi-commit! ((conn <dbi-oracle-connection>))
     (commit (oracle-connection conn)))

@@ -41,7 +41,10 @@
 	    query-columns
 	    row-count
 	    commit rollback
-	    fetch-row)
+	    fetch-row
+	    ;; diagnosis
+	    connection-open?
+	    statement-open?)
     (import (rnrs)
 	    (rnrs mutable-strings)
 	    (oracle oci)
@@ -176,6 +179,13 @@
     (when release-env
       (release-oracle-env (~ conn 'env))))
 
+  (define (connection-open? conn)
+    (let1 status (empty-pointer)
+      (oci-attr-get (~ conn 'env 'srvhp) +oci-htype-server+
+		    (address status) null-pointer +oci-attr-server-status+
+		    (~ conn 'env 'errhp))
+      (= (pointer->integer status) +oci-server-normal+)))
+
   (define (create-statement conn sql)
     (let ((stmthp (empty-pointer))
 	  (type   (empty-pointer))
@@ -199,6 +209,13 @@
   (define (release-statement stmt)
     (oci-handle-free (~ stmt 'stmthp) +oci-htype-stmt+)
     (unregister-ffi-finalizer (~ stmt 'stmthp)))
+
+  (define (statement-open? stmt)
+    (let1 env (empty-pointer)
+      (oci-attr-get (~ stmt 'stmthp) +oci-htype-stmt+
+		    (address env) null-pointer +oci-attr-env+
+		    (~ stmt 'connection 'env 'errhp))
+      (not (null-pointer? env))))
 
   (define-constant +*lobs+ `(,+sqlt-blob+ ,+sqlt-clob+))
 
