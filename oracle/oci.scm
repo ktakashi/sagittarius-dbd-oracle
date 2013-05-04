@@ -72,7 +72,13 @@
 	    (sagittarius ffi))
 
   (define *oci*
-    (open-shared-library (string-append "oci" (shared-object-suffix))))
+    (open-shared-library
+     (string-append (cond-expand 
+		     (linux "libclntsh")
+		     (windows "oci")
+		     (else (error '(oracle oci) "not supported yet")))
+		    (shared-object-suffix))))
+
   (define-c-typedef
     (ub2 unsigned-short)
     (sb2 short)
