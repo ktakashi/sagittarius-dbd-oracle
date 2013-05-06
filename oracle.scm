@@ -62,17 +62,17 @@
   ;; context holder
   (define-class <oracle-env> ()
     ((envhp :init-keyword :envhp :reader envhp)
-     (errhp :init-keyword :errhp :reader errhp)
-     (svchp :init-keyword :svchp :reader svchp)
-     (srvhp :init-keyword :srvhp :reader srvhp)))
+     (errhp :init-keyword :errhp :reader errhp)))
 
   (define-class <oracle-connection> ()
     ((name :init-keyword :name)
      (env  :init-keyword :env)
+     (svchp :init-keyword :svchp :reader svchp)
+     (srvhp :init-keyword :srvhp :reader srvhp)
      (user :init-keyword :user)
      (session :init-keyword :session)
      (data-source-name  :init-keyword :dsn)
-     (auto-commit? :init-keyword :auto-commit)))
+     (auto-commit :init-keyword :auto-commit)))
 
   (define-class <oracle-statement> ()
     ((connection  :init-keyword :connection)
@@ -117,8 +117,7 @@
   (define (create-oracle-env)
     (let ((envhp (empty-pointer))
 	  (errhp (empty-pointer))
-	  (svchp (empty-pointer))
-	  (srvhp (empty-pointer)))
+	  )
       ;; TODO check oci7 (who uses it?)
       ;; TODO error check
       (unless (= (oci-env-create (address envhp) +oci-default+
@@ -128,27 +127,25 @@
 		 +oci-success+)
 	(error 'create-oracle-env "failed to create an oracle environment"))
       (with-check-error (create-oracle-env envhp)
-	(oci-handle-alloc envhp (address svchp)
-			  +oci-htype-svcctx+ 0 null-pointer)
 	(oci-handle-alloc envhp (address errhp)
-			  +oci-htype-error+ 0 null-pointer)
-	(oci-handle-alloc envhp (address srvhp)
-			  +oci-htype-server+ 0 null-pointer))
-      (make <oracle-env> :envhp envhp :errhp errhp :svchp svchp
-	    :srvhp srvhp)))
+			  +oci-htype-error+ 0 null-pointer))
+      (make <oracle-env> :envhp envhp :errhp errhp)))
 
   (define (release-oracle-env env)
-    (oci-handle-free (srvhp env) +oci-htype-server+)
     (oci-handle-free (errhp env) +oci-htype-error+)
-    (oci-handle-free (svchp env) +oci-htype-svcctx+)
     (oci-handle-free (envhp env) +oci-htype-env+))
 
   (define (connect-database env dsn user password :key (auto-commit #f))
-    (let ((srvhp (srvhp env))
+    (let ((envhp (envhp env))
 	  (errhp (errhp env))
-	  (svchp (svchp env))
+	  (svchp (empty-pointer))
+	  (srvhp (empty-pointer))
 	  (authp (empty-pointer)))
       (with-check-error (connect-database (~ env 'envhp))
+	(oci-handle-alloc envhp (address svchp) 
+			  +oci-htype-svcctx+ 0 null-pointer)
+	(oci-handle-alloc envhp (address srvhp) 
+			  +oci-htype-server+ 0 null-pointer)
   	(oci-handle-alloc (~ env 'envhp) (address authp) +oci-htype-session+ 0
 			  null-pointer))
       (with-check-error (connect-database errhp)
@@ -165,23 +162,27 @@
 	)
       ;; TODO alter data format
       (make <oracle-connection>
-	:name dsn :env env :dsn dsn :user user :session authp
+	:name dsn :env env :dsn dsn
+	:svchp svchp :srvhp srvhp
+	:user user :session authp
 	:auto-commit auto-commit)))
 
   (define (disconnect-database conn :optional (release-env #f))
     (let ((errhp (~ conn 'env 'errhp))
-	  (svchp (~ conn 'env 'svchp))
-	  (srvhp (~ conn 'env 'srvhp))
+	  (svchp (~ conn 'svchp))
+	  (srvhp (~ conn 'srvhp))
 	  (authp (~ conn 'session)))
       (oci-session-end svchp errhp authp +oci-default+)
       (oci-server-detach srvhp errhp +oci-default+)
-      (oci-handle-free authp +oci-htype-session+))
+      (oci-handle-free authp +oci-htype-session+)
+      (oci-handle-free srvhp +oci-htype-server+)
+      (oci-handle-free svchp +oci-htype-svcctx+))
     (when release-env
       (release-oracle-env (~ conn 'env))))
 
   (define (connection-open? conn)
     (let1 status (empty-pointer)
-      (oci-attr-get (~ conn 'env 'srvhp) +oci-htype-server+
+      (oci-attr-get (~ conn 'srvhp) +oci-htype-server+
 		    (address status) null-pointer +oci-attr-server-status+
 		    (~ conn 'env 'errhp))
       (= (pointer->integer status) +oci-server-normal+)))
@@ -191,7 +192,7 @@
 	  (type   (empty-pointer))
 	  (envhp (~ conn 'env 'envhp))
 	  (errhp (~ conn 'env 'errhp))
-	  (svchp (~ conn 'env 'svchp)))
+	  (svchp (~ conn 'svchp)))
       (with-check-error (create-statement errhp)
 	(oci-handle-alloc envhp (address stmthp)
 			  +oci-htype-stmt+ 0 null-pointer)
@@ -314,9 +315,9 @@
 
     (let ((select? (= (~ stmt 'type) +oci-stmt-select+))
 	  (stmthp  (~ stmt 'stmthp))
-	  (svchp   (~ stmt 'connection 'env 'svchp))
+	  (svchp   (~ stmt 'connection 'svchp))
 	  (errhp   (~ stmt 'connection 'env 'errhp))
-	  (commit? (~ stmt 'connection 'auto-commit?)))
+	  (commit? (~ stmt 'connection 'auto-commit)))
       ;; bind if args is not null
       (unless (null? args)
 	(let loop ((i 1) (args args))
@@ -347,12 +348,12 @@
   (define (commit conn)
     (let1 errhp (~ conn 'env 'errhp)
       (with-check-error (commit errhp)
-	(oci-trans-commit (~ conn 'env 'svchp) errhp +oci-default+))))
+	(oci-trans-commit (~ conn 'svchp) errhp +oci-default+))))
 
   (define (rollback conn)
     (let1 errhp (~ conn 'env 'errhp)
       (with-check-error (commit errhp)
-	(oci-trans-rollback (~ conn 'env 'svchp) errhp +oci-default+))))
+	(oci-trans-rollback (~ conn 'svchp) errhp +oci-default+))))
 
   (define-constant +fetch-row-count+ 1)
 
@@ -450,7 +451,7 @@
 
   (define (make-oracle-blob-port conn blob-locator)
     (let ((lenp (empty-pointer))
-	  (svchp (~ conn 'env 'svchp))
+	  (svchp (~ conn 'svchp))
 	  (errhp (~ conn 'env 'errhp)))
       (oci-lob-get-length svchp errhp blob-locator (address lenp))
       (let* ((len  (pointer->integer lenp))
@@ -475,7 +476,7 @@
 
   (define (make-oracle-clob-port conn blob-locator)
     (let ((lenp (empty-pointer))
-	  (svchp (~ conn 'env 'svchp))
+	  (svchp (~ conn 'svchp))
 	  (errhp (~ conn 'env 'errhp)))
       (oci-lob-get-length svchp errhp blob-locator (address lenp))
       (let* ((len  (pointer->integer lenp))
@@ -596,7 +597,7 @@
       (let* ((locator (empty-pointer))
 	     (env     (~ stmt 'connection 'env))
 	     (errhp   (~ env 'errhp))
-	     (svchp   (~ env 'svchp)))
+	     (svchp   (~ stmt 'connection 'svchp)))
 
 	(with-check-error (bind-parameter errhp)
 	  (oci-descriptor-alloc (~ env 'envhp) (address locator) 

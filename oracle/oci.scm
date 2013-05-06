@@ -74,9 +74,10 @@
   (define *oci*
     (open-shared-library
      (string-append (cond-expand 
-		     (linux "libclntsh")
-		     (windows "oci")
-		     (else (error '(oracle oci) "not supported yet")))
+		     ;; FIXME i believe only Windows and Cygwin uses
+		     ;; oci.dll (on Cygwin it uses Windows' one)
+		     ((or windows cygwin) "oci")
+		     (else "libclntsh"))
 		    (shared-object-suffix))))
 
   (define-c-typedef
