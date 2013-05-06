@@ -32,6 +32,7 @@
 (library (oracle)
     (export create-oracle-env
 	    release-oracle-env
+	    construct-connection-string
 	    connect-database
 	    disconnect-database
 	    create-statement
@@ -134,6 +135,14 @@
   (define (release-oracle-env env)
     (oci-handle-free (errhp env) +oci-htype-error+)
     (oci-handle-free (envhp env) +oci-htype-env+))
+
+  (define (construct-connection-string name host :key (port 1521)
+				       (protocol 'TCP))
+    (format "~a" 
+	    `(DESCRIPTION= (ADDRESS= (PROTOCOL= ,protocol)
+				     (HOST= ,host)
+				     (PORT= ,port))
+			   (CONNECT_DATA= (SERVICE_NAME= ,name)))))
 
   (define (connect-database env dsn user password :key (auto-commit #f))
     (let ((envhp (envhp env))
