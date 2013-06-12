@@ -588,9 +588,9 @@
 
   ;; supports only utf8 string for now
   (define-scheme->c (<string> s)
-    (let1 bv (string->utf8 s)
+    (let1 bv (string->utf8 (string-append s "\x0;"))
       ;; TODO should we use +sqlt-chr+ (varchar2)?
-      (values +sqlt-str+ (bytevector-length s) +oci-default+ bv)))
+      (values +sqlt-str+ (bytevector-length bv) +oci-default+ bv)))
 
   (define-scheme->c (<bytevector> bv)
     (values +sqlt-bin+ (bytevector-length bv) +oci-default+ bv))
