@@ -137,12 +137,15 @@
     (oci-handle-free (envhp env) +oci-htype-env+))
 
   (define (construct-connection-string name host :key (port 1521)
-				       (protocol 'TCP))
+				       (protocol 'TCP)
+				       (use-sid #f))
     (format "~a" 
 	    `(DESCRIPTION= (ADDRESS= (PROTOCOL= ,protocol)
 				     (HOST= ,host)
 				     (PORT= ,port))
-			   (CONNECT_DATA= (SERVICE_NAME= ,name)))))
+			   (CONNECT_DATA= (,(if use-sid 
+						'SID= 
+						'SERVICE_NAME=) ,name)))))
 
   (define (connect-database env dsn user password :key (auto-commit #f))
     (let ((envhp (envhp env))

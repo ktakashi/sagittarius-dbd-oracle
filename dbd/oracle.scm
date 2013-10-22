@@ -55,20 +55,27 @@
 	  default))
     (define (->boolean s)
       (if (string? s) (not (string=? s "false")) s))
-    (define (make-dsn name host port proto)
-      (construct-connection-string name host :port port :protocol proto))
+    (define (make-dsn name host port proto sid?)
+      (construct-connection-string name host :port port :protocol proto
+				   :use-sid sid?))
     (let ((env (oracle-env driver))
 	  (database (get-option "database"))
+	  (sid      (get-option "sid"))
 	  (host     (get-option "host"))
 	  (port     (get-option "port" 1521))
 	  (protocol (get-option "protocol" 'TCP)))
-      (unless database
-	(assertion-violation 'dbi-make-connection
-			     "database option is required"))
+      (unless (or database sid)
+	(assertion-violation 'dbi-make-connection 
+			     "database or sid option is required"))
+      (when (and database sid)
+	(assertion-violation 'dbi-make-connection 
+			     "database and sid can't be specified both"))
       (make <dbi-oracle-connection>
 	:connection (connect-database env
 				      (if host 
-					  (make-dsn database host port protocol)
+					  (make-dsn (or database sid)
+						    host port protocol
+						    sid)
 					  database)
 				      username password
 				      :auto-commit auto-commit))))
