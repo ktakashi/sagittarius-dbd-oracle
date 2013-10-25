@@ -36,7 +36,8 @@
 	    (sagittarius)
 	    (sagittarius control)
 	    (sagittarius object)
-	    (clos user))
+	    (clos user)
+	    (srfi :1 lists))
   (define-class <dbi-oracle-driver> (<dbi-driver>)
     ((env :init-keyword :env :reader oracle-env)))
   (define-class <dbi-oracle-connection> (<dbi-connection>)
@@ -44,6 +45,12 @@
   (define-class <dbi-oracle-query> (<dbi-query>)
     ((statement :init-keyword :statement :reader oracle-statement)
      (cursor    :init-value #f)))
+
+  (define-class <dbi-oracle-table> (<dbi-table>)
+    ((conn :init-keyword :conn)))
+  (define-class <dbi-oracle-column> (<dbi-column>)
+    ())
+
 
   (define-method dbi-make-connection ((driver <dbi-oracle-driver>)
 				      options option-alist 
@@ -166,4 +173,44 @@
 
   (define (make-oracle-driver)
     (make <dbi-oracle-driver> :env (create-oracle-env)))
+
+  ;; couldn't find using OCI so just query it
+  (define-method dbi-tables ((conn <dbi-oracle-connection>)
+			     :key (schema "") (table "") (types '(table view)))
+    (define (construct-sql type schema table)
+      (let1 base (format "select OWNER, ~a_name from all_~as where 1=1"
+			 type type)
+	(string-append base
+		       (if (zero? (string-length schema))
+			   ""
+			   (string-append " and OWNER like ?"))
+		       (if (zero? (string-length table))
+			   ""
+			   (format " and ~a_name like ?" type)))))
+    (define (filter-params . params)
+      (filter-map (lambda (s) (and (not (zero? (string-length s))) s)) params))
+    (append-map! (lambda (type)
+		   (let1 q (dbi-prepare conn 
+					(construct-sql type schema table))
+		     (apply dbi-execute! q (filter-params schema table))
+		     (dbi-query-map q 
+				    (lambda (r)
+				      (make <dbi-oracle-table>
+					:schema (~ r 0) :name (~ r 1)
+					:type type :conn conn))))) types))
+  
+  ;; TODO 
+  (define-method dbi-table-columns ((table <dbi-oracle-table>))
+    (let1 q (dbi-execute-query-using-connection! 
+	     (~ table 'conn) 
+	     "select column_name, data_type, nullable from all_tab_cols \
+              where table_name = ? and owner = ?"
+	     (~ table 'name) (~ table 'schema))
+      (dbi-query-map q (lambda (r)
+			 ;; TODO check nullable
+			 (make <dbi-oracle-column>
+			   :name (~ r 0) :table table
+			   :column-type (~ r 1)
+			   :nullable? (string=? (~ r 2) "Y"))))))
+  
 )
