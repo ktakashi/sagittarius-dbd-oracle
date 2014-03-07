@@ -518,6 +518,8 @@
   (define (c->scheme conn type buffer)
     (cond ((= type +sqlt-int+)
 	   (pointer-ref-c-int32 buffer 0))
+	  ((= type +sqlt-flt+)
+	   (pointer-ref-c-double buffer 0))
 	  ((= type +sqlt-blob+)
 	   (make-oracle-blob-port conn buffer))
 	  ((= type +sqlt-clob+)
